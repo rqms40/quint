@@ -184,10 +184,11 @@ impl Value {
 
     pub fn to_itf(&self) -> itf::Value {
         match self.view() {
-            // The TypeScript side parses JSON numbers longer than 15 digits as
-            // bignumber.js values instead of integers, so those are written as
-            // `#bigint`, the standard ITF encoding of integers
-            ValueRef::Int(i) if i.unsigned_abs() < 10u64.pow(15) => itf::Value::Number(i),
+            // json-bigint parses a JSON number as a bignumber.js value when the
+            // token is longer than 15 characters. The minus sign counts, so the
+            // safe range is (-10^14, 10^15): -10^14 is 16 characters. Longer
+            // integers are written as `#bigint`, the standard ITF encoding.
+            ValueRef::Int(i) if json_number_text_len(i) <= 15 => itf::Value::Number(i),
             ValueRef::Int(i) => itf::Value::BigInt(itf::value::BigInt::new(i)),
             ValueRef::BigInt(n) => itf::Value::BigInt(itf::value::BigInt::new(n.clone())),
             ValueRef::Bool(b) => itf::Value::Bool(b),
@@ -229,5 +230,52 @@ impl Value {
             ),
             ValueRef::Lambda(_, _) => panic!("Cannot convert Lambda to ITF"),
         }
+    }
+}
+
+/// Character length of `i` written as a JSON number, including the minus sign.
+fn json_number_text_len(i: i64) -> u32 {
+    let digits = i.unsigned_abs().checked_ilog10().unwrap_or(0) + 1;
+    digits + u32::from(i < 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use num_bigint::BigInt;
+
+    fn assert_int_json(value: Value, digits: &str) {
+        let json = serde_json::to_string(&value.to_itf()).unwrap();
+        let expected = if digits.len() <= 15 {
+            digits.to_string()
+        } else {
+            format!("{{\"#bigint\":\"{digits}\"}}")
+        };
+        assert_eq!(json, expected, "{digits}");
+    }
+
+    #[test]
+    fn integers_longer_than_15_json_chars_are_bigint() {
+        // 15 characters stay JSON numbers. 16 or more, counting '-', are #bigint,
+        // because json-bigint revives those tokens as bignumber.js values.
+        let i64_cases = [
+            ("999999999999999", 999_999_999_999_999i64), // 10^15 - 1
+            ("1000000000000000", 1_000_000_000_000_000), // 10^15
+            ("9007199254740991", 9_007_199_254_740_991), // 2^53 - 1
+            ("9223372036854775807", i64::MAX),           // 2^63 - 1
+            ("-99999999999999", -(10i64.pow(14) - 1)),   // -(10^14 - 1), 15 chars
+            ("-100000000000000", -(10i64.pow(14))),      // -10^14, 16 chars
+            ("-999999999999999", -(10i64.pow(15) - 1)),  // -(10^15 - 1)
+            ("-1000000000000000", -(10i64.pow(15))),     // -10^15
+            ("-9007199254740991", -(2i64.pow(53) - 1)),  // -(2^53 - 1)
+            ("-9223372036854775808", i64::MIN),          // -2^63
+        ];
+        for (digits, n) in i64_cases {
+            assert_int_json(Value::int(n), digits);
+        }
+        assert_int_json(
+            Value::bigint(BigInt::from(i64::MAX) + 1),
+            "9223372036854775808",
+        );
     }
 }

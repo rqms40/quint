@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 ### Fixed
 
+- `quint run` with the Rust backend now writes integers as `{"#bigint": "..."}` in ITF traces and on the console. json-bigint revives a JSON number as a bignumber.js value (`{s, e, c}`) when its text is longer than 15 characters, counting the minus sign, and that value was serialized as a record. This hit every integer outside (-10^14, 10^15) that was still sent as a JSON number, including `-(10^15 - 1)` and `-10^14` (#2080)
 - A doc comment placed at the end of a module, immediately before the closing `}`, is now accepted and ignored. Previously it failed to parse and hid other errors in the file (#2013)
 - `quint test` exits with an error when no definitions match. Previously, a run that selected nothing (including `quint test FILE` with no names ending in `Test`, the default filter) printed only the module name and exited 0. With `--out`, that diagnostic is included in the JSON `errors` array (#2056)
 - Fixed `flatten` in the Rust evaluator silently returning an empty set for infinite inner sets, e.g. `Set(Int).flatten()`. It now reports `QNT501`

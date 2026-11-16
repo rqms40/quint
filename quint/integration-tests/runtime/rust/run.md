@@ -646,6 +646,42 @@ x: 9223372036854775809
 x: 9223372036854775810
 ```
 
+## Integers around the 15-character JSON cutoff
+
+json-bigint revives a JSON number as a bignumber.js value when the token is
+longer than 15 characters, and the minus sign counts. `10^15 - 1` is 15
+characters; `10^15` and `-10^14` are 16. Each of these must be an integer in
+the ITF file and on the console, including the negatives.
+
+<!-- !test in run bigint itf boundaries -->
+```
+set -euo pipefail
+spec=testFixture/bug2080bigints.qnt
+for name in init15m1 init15 init53 init63 initNeg15m1 initNeg15 initNeg14 initNeg14m1 initNeg53; do
+  itf=$(mktemp)
+  quint run --backend=rust --init="$name" --max-samples=1 --max-steps=0 --seed=1 \
+    --verbosity=3 --out-itf="$itf" "$spec" > /tmp/bug2080.out 2>&1
+  state=$(sed -n 's/.*\[State 0\] //p' /tmp/bug2080.out)
+  value=$(jq -c '.states[0].x' "$itf")
+  rm -f "$itf"
+  printf '%s %s %s\n' "$name" "$state" "$value"
+done
+rm -f /tmp/bug2080.out
+```
+
+<!-- !test out run bigint itf boundaries -->
+```
+init15m1 { x: 999999999999999 } {"#bigint":"999999999999999"}
+init15 { x: 1000000000000000 } {"#bigint":"1000000000000000"}
+init53 { x: 9007199254740991 } {"#bigint":"9007199254740991"}
+init63 { x: 9223372036854775808 } {"#bigint":"9223372036854775808"}
+initNeg15m1 { x: -999999999999999 } {"#bigint":"-999999999999999"}
+initNeg15 { x: -1000000000000000 } {"#bigint":"-1000000000000000"}
+initNeg14 { x: -100000000000000 } {"#bigint":"-100000000000000"}
+initNeg14m1 { x: -99999999999999 } {"#bigint":"-99999999999999"}
+initNeg53 { x: -9007199254740991 } {"#bigint":"-9007199254740991"}
+```
+
 ## Debug output in init action
 
 This test verifies that q::debug output is printed when using the Rust backend.

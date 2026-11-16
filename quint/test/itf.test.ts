@@ -4,6 +4,7 @@ import { quintExAreEqual } from './util'
 import { zip } from '../src/util'
 
 import { buildExpression } from './builders/ir'
+import { parseJsonBig } from '../src/jsonHelper'
 import { ItfTrace, ofItf, ofItfNormalized, toItf } from '../src/itf'
 
 describe('toItf', () => {
@@ -128,6 +129,32 @@ describe('toItf', () => {
       zip(roundTripTrace, trace).every(([a, b]) => quintExAreEqual(a, b)),
       `round trip conversion of trace failed`
     )
+  })
+})
+
+describe('ofItf integers parsed by json-bigint', () => {
+  // json-bigint turns a JSON number into a bignumber.js value when the token
+  // is longer than 15 characters (the minus sign counts). Those must come back
+  // as integers, not as {s, e, c} records.
+  const cases: [string, string][] = [
+    ['10^15 - 1', '999999999999999'],
+    ['10^15', '1000000000000000'],
+    ['2^53 - 1', '9007199254740991'],
+    ['2^63', '9223372036854775808'],
+    ['-(10^15 - 1)', '-999999999999999'],
+    ['-10^15', '-1000000000000000'],
+    ['-10^14', '-100000000000000'],
+    ['-(10^14 - 1)', '-99999999999999'],
+    ['-(2^53 - 1)', '-9007199254740991'],
+  ]
+
+  cases.forEach(([label, digits]) => {
+    it(`decodes ${label} as #bigint ${digits}`, () => {
+      const trace = parseJsonBig(`{"vars":["x"],"states":[{"x":${digits}}]}`)
+      const itf = toItf(['x'], ofItf(trace))
+      assert(itf.isRight(), `invalid ITF trace for ${digits}: ${itf.value}`)
+      assert.deepEqual(itf.unwrap().states[0].x, { '#bigint': digits })
+    })
   })
 })
 

@@ -38,6 +38,7 @@ export type ItfValue =
   | boolean
   | string
   | number
+  | bigint
   | ItfValue[] // Sequence
   | ItfBigint
   | ItfTup
@@ -59,6 +60,13 @@ type ItfUnitVariant = { tag: ItfValue }
 // Type predicates to help with type narrowing
 function isBigint(v: ItfValue): v is ItfBigint {
   return (v as ItfBigint)['#bigint'] !== undefined
+}
+
+// json-bigint revives JSON numbers longer than 15 characters as bignumber.js
+// values (`{s, e, c}`, with the minus sign counting toward the length). Those
+// are integers, not records. `_isBigNumber` lives on the bignumber.js prototype.
+function isBignumberJs(v: ItfValue): boolean {
+  return typeof v === 'object' && v !== null && (v as { _isBigNumber?: boolean })._isBigNumber === true
 }
 
 function isTup(v: ItfValue): v is ItfTup {
@@ -230,6 +238,8 @@ export function ofItfValue(value: ItfValue, getId: () => bigint): QuintEx {
     return { id, kind: 'bool', value }
   } else if (typeof value === 'string') {
     return { id, kind: 'str', value }
+  } else if (typeof value === 'bigint') {
+    return { id, kind: 'int', value }
   } else if (isBigint(value)) {
     // this is the standard way of encoding an integer in ITF.
     return { id, kind: 'int', value: BigInt(value['#bigint']) }
@@ -238,6 +248,8 @@ export function ofItfValue(value: ItfValue, getId: () => bigint): QuintEx {
     // but we consume it for backwards compatibility with older ITF traces.
     // See: https://apalache-mc.org/docs/adr/015adr-trace.html
     return { id, kind: 'int', value: BigInt(value) }
+  } else if (isBignumberJs(value)) {
+    return { id, kind: 'int', value: BigInt(String(value)) }
   } else if (Array.isArray(value)) {
     return { id, kind: 'app', opcode: 'List', args: value.map(s => ofItfValue(s, getId)) }
   } else if (isTup(value)) {
