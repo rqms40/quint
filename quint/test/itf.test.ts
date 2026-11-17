@@ -184,6 +184,37 @@ describe('ofItf integers parsed by json-bigint', () => {
       x: { '#bigint': '1' },
     })
   })
+
+  // Built with the constructor of a value json-bigint just produced, including
+  // one at the 1e21 toFixed() boundary. This stays an integer even when a
+  // direct bignumber.js import is a different copy.
+  it('decodes an instance of the constructor json-bigint produced', () => {
+    const revived = parseJsonBig('1000000000000000')
+    const trace = parseJsonBig('{"vars":["x"],"states":[{}]}')
+    trace.states[0].x = new revived.constructor('-1000000000000000000000')
+    const itf = toItf(['x'], ofItf(trace))
+    assert(itf.isRight(), `invalid ITF trace: ${itf.value}`)
+    assert.deepEqual(itf.unwrap().states[0].x, { '#bigint': '-1000000000000000000000' })
+  })
+
+  it('does not decode a lookalike from a different constructor', () => {
+    const lookalike = Object.assign(Object.create({ toFixed: () => '1000000000000000' }), {
+      s: 1,
+      e: 15,
+      c: [10],
+      _isBigNumber: true,
+    })
+    const trace = parseJsonBig('{"vars":["x"],"states":[{}]}')
+    trace.states[0].x = lookalike
+    const itf = toItf(['x'], ofItf(trace))
+    assert(itf.isRight(), `invalid ITF trace: ${itf.value}`)
+    assert.deepEqual(itf.unwrap().states[0].x, {
+      s: { '#bigint': '1' },
+      e: { '#bigint': '15' },
+      c: [{ '#bigint': '10' }],
+      _isBigNumber: true,
+    })
+  })
 })
 
 describe('ofItfNormalized', () => {

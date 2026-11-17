@@ -9,8 +9,8 @@
  * See LICENSE in the project root for license information.
  */
 
+import { createRequire } from 'module'
 import { Either, left, merge, right } from '@sweet-monads/either'
-import BigNumber from 'bignumber.js'
 import { chunk } from 'lodash'
 import { QuintApp, QuintEx, QuintStr } from './ir/quintIr'
 import rv from './runtime/impl/runtimeValue'
@@ -63,10 +63,15 @@ function isBigint(v: ItfValue): v is ItfBigint {
   return (v as ItfBigint)['#bigint'] !== undefined
 }
 
-// json-bigint revives JSON numbers longer than 15 characters as bignumber.js
-// instances. `instanceof` uses the same constructor json-bigint loads, so a
-// record that merely contains a field `_isBigNumber` is left as a record.
-// toString() switches to exponent notation at 1e21; toFixed() stays decimal.
+// json-bigint revives JSON numbers longer than 15 characters as instances of
+// the bignumber.js its parser required. Bind that constructor: a direct import
+// can resolve a different copy, and `instanceof` then fails so the value is
+// decoded as a {s, e, c} record. A record or state that merely contains
+// `_isBigNumber` is left as a record. toString() switches to exponent notation
+// at 1e21; toFixed() stays decimal.
+const requireFromJsonBigint = createRequire(require.resolve('json-bigint'))
+const BigNumber: typeof import('bignumber.js').default = requireFromJsonBigint('bignumber.js')
+
 function bigintFromBignumber(v: ItfValue): bigint | undefined {
   if (typeof v === 'object' && v !== null && v instanceof BigNumber) {
     return BigInt(v.toFixed())
