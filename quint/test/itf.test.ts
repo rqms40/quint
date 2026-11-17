@@ -156,6 +156,34 @@ describe('ofItf integers parsed by json-bigint', () => {
       assert.deepEqual(itf.unwrap().states[0].x, { '#bigint': digits })
     })
   })
+
+  // bignumber.js toString() uses exponent notation from 1e21 up.
+  ;['1000000000000000000000', '-1000000000000000000000'].forEach(digits => {
+    it(`decodes ${digits} in decimal, not exponent notation`, () => {
+      const trace = parseJsonBig(`{"vars":["x"],"states":[{"x":${digits}}]}`)
+      const itf = toItf(['x'], ofItf(trace))
+      assert(itf.isRight(), `invalid ITF trace for ${digits}: ${itf.value}`)
+      assert.deepEqual(itf.unwrap().states[0].x, { '#bigint': digits })
+    })
+  })
+
+  it('does not treat a record containing _isBigNumber as a bignumber', () => {
+    const trace = parseJsonBig('{"vars":["r"],"states":[{"r":{"_isBigNumber":true,"x":1}}]}')
+    const itf = toItf(['r'], ofItf(trace))
+    assert(itf.isRight(), `invalid ITF trace: ${itf.value}`)
+    assert.deepEqual(itf.unwrap().states[0].r, { _isBigNumber: true, x: { '#bigint': '1' } })
+  })
+
+  it('does not treat a state variable named _isBigNumber as a bignumber', () => {
+    const trace = parseJsonBig('{"vars":["_isBigNumber","x"],"states":[{"_isBigNumber":true,"x":1}]}')
+    const itf = toItf(['_isBigNumber', 'x'], ofItf(trace))
+    assert(itf.isRight(), `invalid ITF trace: ${itf.value}`)
+    assert.deepEqual(itf.unwrap().states[0], {
+      '#meta': { index: 0 },
+      _isBigNumber: true,
+      x: { '#bigint': '1' },
+    })
+  })
 })
 
 describe('ofItfNormalized', () => {
